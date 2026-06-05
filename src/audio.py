@@ -1,5 +1,10 @@
 """
 Audio recording and playback.
+
+Thin wrappers around `arecord` / `aplay`. Device IDs come from
+configs/settings.yaml using ALSA card *names* (e.g. `UACDemoV10`,
+`Headphones`) rather than card numbers — names are stable across
+reboots and HDMI plug/unplug, numbers are not.
 """
 
 import subprocess
@@ -16,7 +21,7 @@ def record(seconds: int, output_path: str | Path) -> Path:
     subprocess.run(
         [
             "arecord",
-            "-D", f"plughw:{a['mic_card']},{a['mic_device']}",
+            "-D", f"plughw:CARD={a['mic_name']},DEV={a['mic_device']}",
             "-f", "S16_LE",
             "-r", str(a["sample_rate"]),
             "-c", str(a["channels"]),
@@ -34,7 +39,7 @@ def play(audio_path: str | Path) -> None:
     subprocess.run(
         [
             "aplay",
-            "-D", f"plughw:{a['speaker_card']},{a['speaker_device']}",
+            "-D", f"plughw:CARD={a['speaker_name']},DEV={a['speaker_device']}",
             str(audio_path),
         ],
         check=True,

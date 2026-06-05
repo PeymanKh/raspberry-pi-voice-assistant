@@ -1,13 +1,5 @@
-
 python-dotenv
-
 pyyaml
-
 openai
-
-gtts
-
 tenacity
-
 gpiozero
-
