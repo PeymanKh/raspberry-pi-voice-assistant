@@ -16,6 +16,6 @@ gpio:
   motion:       24
 
 models:
-  llm: google/gemini-3-flash-preview
+  llm: google/gemini-3.1-flash-lite-preview
   stt: openai/gpt-4o-transcribe
   tts: google/gemini-3.1-flash-tts-preview
