@@ -19,3 +19,7 @@ models:
   llm: google/gemini-3.1-flash-lite-preview
   stt: openai/gpt-4o-transcribe
   tts: google/gemini-3.1-flash-tts-preview
+
+tts:
+  voice: Kore          # Gemini voices: Aoede, Charon, Fenrir, Kore, Leda, Orus, Puck, Zephyr
+  sample_rate: 24000   # Gemini TTS outputs 24kHz / 16-bit mono PCM
