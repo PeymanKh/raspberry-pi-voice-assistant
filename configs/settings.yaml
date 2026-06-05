@@ -17,5 +17,5 @@ gpio:
 
 models:
   llm: google/gemini-3-flash-preview
-  stt: openai/whisper-large-v3
+  stt: openai/gpt-4o-transcribe
   tts: google/gemini-3.1-flash-tts-preview
