@@ -32,12 +32,14 @@ from src import db, hardware
 from src.audio import play, record_until_released
 from src.llm import chat
 from src.stt import transcribe
-from src.tts import speak
+from src.tts import speak, synthesize
 
 
 # === Tunables ===
 PROJECT_ROOT = Path(__file__).resolve().parent
 WELCOME_SOUND = PROJECT_ROOT / "assets" / "welcome.wav"
+RESET_ANNOUNCE = PROJECT_ROOT / "assets" / "reset_announce.wav"
+RESET_ANNOUNCE_TEXT = "Chat history cleared. Zero messages."
 TMP_TALK_WAV = Path("/tmp/talk.wav")
 
 MIN_RECORDING_S = 5.0     # below this is "noise", discarded
@@ -151,7 +153,11 @@ def _handle_reset() -> None:
             db.clear()
             _reset_welcome_cooldown()
             _blink_all(times=2)
-            speak("Chat history cleared. Zero messages.")
+            # Play the cached announcement if available, fall back to live TTS.
+            if RESET_ANNOUNCE.exists():
+                play(RESET_ANNOUNCE)
+            else:
+                speak(RESET_ANNOUNCE_TEXT)
             print("[reset] history cleared, motion cooldown reset.")
         except Exception as e:
             print(f"[reset] error: {e}")
@@ -169,16 +175,15 @@ def _motion_loop() -> None:
     while True:
         motion.wait_for_motion()
 
-        # Cooldown check.
+        # Cooldown check. Read-only — do NOT update _last_welcome_ts here.
+        # We only mark cooldown AFTER successfully playing the welcome, so a
+        # motion event that races with reset / talk doesn't consume the slot.
         with _welcome_lock:
-            now = time.monotonic()
-            if now - _last_welcome_ts < MOTION_COOLDOWN_S:
-                # Still cooling down. Wait for the PIR to fall back to LOW
-                # so we don't busy-loop on a single sustained motion event.
-                motion.wait_for_no_motion()
-                time.sleep(1.0)
-                continue
-            _last_welcome_ts = now
+            in_cooldown = (time.monotonic() - _last_welcome_ts) < MOTION_COOLDOWN_S
+        if in_cooldown:
+            motion.wait_for_no_motion()
+            time.sleep(1.0)
+            continue
 
         # Don't crash into an in-progress talk/reset.
         if not _busy.acquire(blocking=False):
@@ -186,6 +191,7 @@ def _motion_loop() -> None:
             time.sleep(1.0)
             continue
         try:
+            played = False
             try:
                 if WELCOME_SOUND.exists():
                     print(f"[motion] playing {WELCOME_SOUND.name}")
@@ -193,9 +199,14 @@ def _motion_loop() -> None:
                 else:
                     print("[motion] welcome.wav missing — falling back to TTS.")
                     speak("Hello! Press the talk button to chat with me.")
+                played = True
             except Exception as e:
                 print(f"[motion] welcome failed: {e}")
                 _buzz_error()
+            # Only consume the 5-min cooldown if we actually played.
+            if played:
+                with _welcome_lock:
+                    _last_welcome_ts = time.monotonic()
         finally:
             _busy.release()
 
@@ -205,7 +216,20 @@ def _motion_loop() -> None:
 
 # === Entrypoint ===
 
+def _ensure_static_clips() -> None:
+    """Pre-render fixed announcements once. Saves an API call per RESET forever."""
+    if not RESET_ANNOUNCE.exists():
+        try:
+            print(f"[setup] generating {RESET_ANNOUNCE.name} (one-time)...")
+            synthesize(RESET_ANNOUNCE_TEXT, RESET_ANNOUNCE)
+            print(f"[setup] cached at {RESET_ANNOUNCE}")
+        except Exception as e:
+            print(f"[setup] cache gen failed (will fall back to live TTS): {e}")
+
+
 def main() -> None:
+    _ensure_static_clips()
+
     talk_btn = hardware.button_talk()
     reset_btn = hardware.button_reset()
     talk_btn.when_pressed = _handle_talk
