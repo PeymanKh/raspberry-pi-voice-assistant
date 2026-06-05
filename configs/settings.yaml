@@ -1,0 +1,21 @@
+audio:
+  mic_name:     UACDemoV10
+  mic_device:   0
+  speaker_name: Headphones
+  speaker_device: 0
+  sample_rate:  16000
+  channels:     1
+
+gpio:
+  led_yellow:   17
+  led_green:    27
+  led_red:      18
+  button_talk:  25
+  button_reset: 22
+  buzzer:       23
+  motion:       24
+
+models:
+  llm: google/gemini-3-flash-preview
+  stt: openai/whisper-large-v3
+  tts: google/gemini-3.1-flash-tts-preview
