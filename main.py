@@ -17,17 +17,25 @@ from src.logger import SENSOR, SYSTEM
 _busy = threading.Lock()  # prevent talk + presence from running concurrently
 
 
-def _on_talk_pressed() -> None:
-    if not _busy.acquire(blocking=False):
-        return
+def _run_talk() -> None:
     try:
         talk.handle()
     finally:
         _busy.release()
 
 
+def _on_talk_pressed() -> None:
+    # MUST return fast: gpiozero dispatches every pin callback from a single
+    # internal thread, so blocking here also blocks the touch button's
+    # `when_pressed` — meaning the user couldn't interrupt the AI's reply.
+    # Offload the long-running pipeline to a worker thread.
+    if not _busy.acquire(blocking=False):
+        return
+    threading.Thread(target=_run_talk, daemon=True).start()
+
+
 def _on_touch() -> None:
-    stopped = audio.stop_playback()
+    stopped = audio.request_stop()
     SENSOR.info("touch — playback stopped" if stopped else "touch — nothing playing")
 
 

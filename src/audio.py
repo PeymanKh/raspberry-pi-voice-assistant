@@ -6,8 +6,13 @@ configs/settings.yaml using ALSA card *names* (e.g. `UACDemoV10`,
 `Headphones`) rather than card numbers — names are stable across
 reboots and HDMI plug/unplug, numbers are not.
 
-`play()` is interruptible — `stop_playback()` kills the currently
+`play()` is interruptible — `request_stop()` kills the currently
 running aplay so the touch sensor can stop the TTS mid-sentence.
+If `request_stop()` is called while we're between turns (e.g. mid
+TTS synthesis), a one-shot "stop requested" flag is latched so the
+imminent `play()` call returns immediately. This makes the touch
+interrupt feel reliable even when the user touches the pad before
+the audio has actually started.
 """
 
 import signal
@@ -24,6 +29,10 @@ from .config_loader import settings
 # concurrent caller (the touch handler) can terminate it.
 _play_lock = threading.Lock()
 _current_play_proc: Optional[subprocess.Popen] = None
+# Latched when stop is requested but nothing is playing yet.
+# The next `play()` call sees it, clears it, and returns without
+# touching aplay. Cleared on every successful start of a new play.
+_stop_pending: bool = False
 
 
 def record(seconds: int, output_path: str | Path) -> Path:
@@ -83,9 +92,16 @@ def record_until_released(button, max_seconds: float, output_path: str | Path) -
 
 
 def play(audio_path: str | Path) -> None:
-    """Play an audio file. Blocks until done, but can be cut short by stop_playback()."""
-    global _current_play_proc
+    """Play an audio file. Blocks until done, but can be cut short by request_stop()."""
+    global _current_play_proc, _stop_pending
     a = settings()["audio"]
+
+    # If the user already asked to stop (e.g. touched the pad during TTS
+    # synthesis), consume the request and skip this clip entirely.
+    with _play_lock:
+        if _stop_pending:
+            _stop_pending = False
+            return
 
     proc = subprocess.Popen(
         [
@@ -98,9 +114,24 @@ def play(audio_path: str | Path) -> None:
         stderr=subprocess.DEVNULL,
     )
 
+    # Publish the proc handle, but also re-check the stop flag: a touch
+    # could have raced in between the flag check above and Popen returning.
     with _play_lock:
-        # If something else was playing, leave it — the caller decides ordering.
-        _current_play_proc = proc
+        if _stop_pending:
+            _stop_pending = False
+            kill_now = True
+        else:
+            _current_play_proc = proc
+            kill_now = False
+
+    if kill_now:
+        proc.terminate()
+        try:
+            proc.wait(timeout=0.5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        return
 
     try:
         proc.wait()
@@ -110,12 +141,23 @@ def play(audio_path: str | Path) -> None:
                 _current_play_proc = None
 
 
-def stop_playback() -> bool:
-    """Kill the currently playing aplay process, if any. Returns True if it stopped something."""
+def request_stop() -> bool:
+    """Stop the current playback, or latch a stop for the next one.
+
+    Returns True if an aplay process was actually terminated; False if
+    nothing was playing (in which case the stop is *latched* so the next
+    `play()` call returns immediately — this covers touches that land
+    during TTS synthesis, before aplay has started).
+    """
+    global _stop_pending
     with _play_lock:
         proc = _current_play_proc
-    if proc is None or proc.poll() is not None:
-        return False
+        if proc is None or proc.poll() is not None:
+            _stop_pending = True
+            return False
+    # Outside the lock: terminating can take ~tens of ms; we don't want
+    # to hold the lock while play()'s finally clause is also trying to
+    # touch the shared state.
     proc.terminate()
     try:
         proc.wait(timeout=0.5)
@@ -123,3 +165,7 @@ def stop_playback() -> bool:
         proc.kill()
         proc.wait()
     return True
+
+
+# Back-compat alias — older callers (and tests) import stop_playback.
+stop_playback = request_stop
