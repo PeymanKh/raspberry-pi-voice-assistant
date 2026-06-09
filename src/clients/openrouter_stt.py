@@ -15,11 +15,8 @@ from typing import Optional
 
 import requests
 
-from ..logger import get_logger
 from .base import STTClient
 
-
-log = get_logger("stt")
 
 _URL = "https://openrouter.ai/api/v1/audio/transcriptions"
 _REFERER = "https://github.com/PeymanKh/raspberry-pi-voice-assistant"
@@ -33,7 +30,6 @@ class OpenRouterSTT(STTClient):
 
     def transcribe(self, audio_path: str | Path, language: Optional[str] = None) -> str:
         audio_path = Path(audio_path)
-        log.info("transcribing %s (model=%s)", audio_path.name, self.model)
         with open(audio_path, "rb") as f:
             b64 = base64.b64encode(f.read()).decode("utf-8")
 
@@ -57,6 +53,4 @@ class OpenRouterSTT(STTClient):
         )
         if not resp.ok:
             raise RuntimeError(f"OpenRouter STT {resp.status_code}: {resp.text}")
-        text = resp.json()["text"]
-        log.info("transcript: %s", text)
-        return text
+        return resp.json()["text"]

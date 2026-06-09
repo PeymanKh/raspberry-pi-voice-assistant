@@ -15,11 +15,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from ..logger import get_logger
 from .base import TTSClient
-
-
-log = get_logger("tts")
 
 
 class OpenRouterTTS(TTSClient):
@@ -37,7 +33,6 @@ class OpenRouterTTS(TTSClient):
             output_path = Path(tempfile.gettempdir()) / f"tts_{int(time.time() * 1000)}.wav"
         output_path = Path(output_path)
 
-        log.info("synthesizing %d chars (voice=%s)", len(text), self.voice)
         with self._client.audio.speech.with_streaming_response.create(
             model=self.model,
             voice=self.voice,
@@ -52,11 +47,4 @@ class OpenRouterTTS(TTSClient):
             w.setframerate(self.sample_rate)
             w.writeframes(pcm_bytes)
 
-        log.info("wrote %s (%d bytes pcm)", output_path.name, len(pcm_bytes))
         return output_path
-
-    def speak(self, text: str) -> None:
-        from ..audio import play
-        path = self.synthesize(text)
-        log.info("playing %s", path.name)
-        play(path)

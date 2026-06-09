@@ -1,31 +1,32 @@
 """
 Centralised logging.
 
-One format, one place. Modules do:
+Five categories, in CAPS down the left column:
 
-    from .logger import get_logger
-    log = get_logger("talk")
-    log.info("button pressed")
+    SYSTEM  — startup / shutdown messages from main.py
+    SENSOR  — physical world events: motion, recording-too-short
+    HUMAN   — what the user said (after transcription)
+    AI      — what the assistant replied
+    TOOL    — every tool call the agent makes, with args and result
+
+Errors are red regardless of category.
 
 Output:
 
-    12:34:56  talk      button pressed
-    12:34:57  stt       transcribing
-    12:34:59  stt       transcript: what is the temperature
-    12:34:59  llm       chat sent (history=4)
-    12:35:00  tool      get_temperature() -> {"temperature_c": 22.4}
-    12:35:01  llm       reply: it is about 22 degrees in here
-    12:35:01  tts       playing
+    15:24:03  SYSTEM  ready
+    15:24:18  SENSOR  motion — playing welcome
+    15:25:16  HUMAN   how is the temperature in the room
+    15:25:18  TOOL    get_temperature() -> {"temperature_c": 25.0}
+    15:25:18  AI      It's about 25 degrees and a bit warm.
 """
 
 import logging
 import sys
 
 
-_FORMAT = "%(asctime)s  %(name)-8s  %(message)s"
+_FORMAT = "%(asctime)s  %(name)-6s  %(message)s"
 _DATEFMT = "%H:%M:%S"
 
-# ANSI escapes — only used when stderr is an interactive terminal.
 _DIM = "\033[2m"
 _RED = "\033[91m"
 _YELLOW = "\033[93m"
@@ -39,7 +40,6 @@ class _ColourFormatter(logging.Formatter):
             return f"{_RED}{msg}{_END}"
         if record.levelno >= logging.WARNING:
             return f"{_YELLOW}{msg}{_END}"
-        # Dim just the timestamp so the eye lands on the source + message.
         ts, _, rest = msg.partition("  ")
         return f"{_DIM}{ts}{_END}  {rest}"
 
@@ -57,7 +57,6 @@ def _configure_once() -> None:
     root = logging.getLogger()
     root.addHandler(handler)
     root.setLevel(logging.INFO)
-    # Quiet noisy 3rd-party libraries — we only want to hear about errors.
     for noisy in ("httpx", "httpcore", "urllib3", "openai", "asyncio"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
     _configured = True
@@ -66,3 +65,11 @@ def _configure_once() -> None:
 def get_logger(name: str) -> logging.Logger:
     _configure_once()
     return logging.getLogger(name)
+
+
+# Pre-made loggers for the five categories. Modules just import these.
+SYSTEM = get_logger("SYSTEM")
+SENSOR = get_logger("SENSOR")
+HUMAN = get_logger("HUMAN")
+AI = get_logger("AI")
+TOOL = get_logger("TOOL")

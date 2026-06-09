@@ -11,11 +11,7 @@ import time
 
 from src import hardware
 from src.handlers import presence, talk
-from src.logger import get_logger
-
-
-log = get_logger("main")
-motion_log = get_logger("motion")
+from src.logger import SYSTEM
 
 
 _busy = threading.Lock()  # prevent talk + presence from running concurrently
@@ -23,7 +19,7 @@ _busy = threading.Lock()  # prevent talk + presence from running concurrently
 
 def _on_talk_pressed() -> None:
     if not _busy.acquire(blocking=False):
-        return  # something else is running — ignore this press
+        return
     try:
         talk.handle()
     finally:
@@ -32,24 +28,15 @@ def _on_talk_pressed() -> None:
 
 def _motion_loop() -> None:
     motion = hardware.motion()
-    motion_log.info("watcher started")
     while True:
         motion.wait_for_motion()
 
-        if presence.in_cooldown():
-            motion_log.info("motion detected — in cooldown, skipping")
-            motion.wait_for_no_motion()
-            time.sleep(1.0)
-            continue
-
-        if not _busy.acquire(blocking=False):
-            motion_log.info("motion detected — busy, skipping")
+        if presence.in_cooldown() or not _busy.acquire(blocking=False):
             motion.wait_for_no_motion()
             time.sleep(1.0)
             continue
         try:
-            played = presence.handle()
-            if played:
+            if presence.handle():
                 presence.mark_played()
         finally:
             _busy.release()
@@ -64,17 +51,19 @@ def main() -> None:
 
     threading.Thread(target=_motion_loop, daemon=True).start()
 
-    log.info("ready")
-    log.info("hold TALK (GPIO %d) to record (min %.0fs, max %.0fs)",
-             talk_btn.pin.number, talk.MIN_RECORDING_S, talk.MAX_RECORDING_S)
-    log.info("welcome on motion (cooldown %.0f min)", presence.COOLDOWN_S / 60)
-    log.info("Ctrl-C to exit")
+    SYSTEM.info("ready")
+    SYSTEM.info(
+        "hold TALK (GPIO %d) to record (min %.0fs, max %.0fs)",
+        talk_btn.pin.number, talk.MIN_RECORDING_S, talk.MAX_RECORDING_S,
+    )
+    SYSTEM.info("welcome on motion (cooldown %.0f min)", presence.COOLDOWN_S / 60)
+    SYSTEM.info("Ctrl-C to exit")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        log.info("shutting down")
+        SYSTEM.info("shutting down")
 
 
 if __name__ == "__main__":

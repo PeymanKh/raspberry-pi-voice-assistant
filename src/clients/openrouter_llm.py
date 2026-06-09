@@ -14,13 +14,9 @@ from typing import Optional
 
 from openai import OpenAI
 
-from ..logger import get_logger
+from ..logger import TOOL
 from ..tools import DISPATCH, TOOLS_SPEC
 from .base import LLMClient
-
-
-log = get_logger("llm")
-tool_log = get_logger("tool")
 
 
 def _short(obj, limit: int = 120) -> str:
@@ -60,7 +56,6 @@ class OpenRouterLLM(LLMClient):
         )
 
         extra = {"reasoning": {"enabled": True}} if self.reasoning else None
-        log.info("chat sent (model=%s, history=%d)", self.model, len(history))
 
         while True:
             resp = self._client.chat.completions.create(
@@ -83,7 +78,7 @@ class OpenRouterLLM(LLMClient):
                             result = fn(**args)
                         except Exception as e:  # noqa: BLE001
                             result = {"error": str(e)}
-                    tool_log.info("%s(%s) -> %s", tc.function.name, _short(args), _short(result))
+                    TOOL.info("%s(%s) -> %s", tc.function.name, _short(args), _short(result))
                     messages.append(
                         {
                             "role": "tool",
@@ -93,6 +88,5 @@ class OpenRouterLLM(LLMClient):
                     )
                 continue
 
-            log.info("reply: %s", msg.content or "")
             # Drop system prompt before returning the history we persist.
             return (msg.content or ""), messages[1:]

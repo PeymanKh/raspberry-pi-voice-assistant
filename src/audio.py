@@ -79,13 +79,16 @@ def record_until_released(button, max_seconds: float, output_path: str | Path) -
 
 
 def play(audio_path: str | Path) -> None:
-    """Play an audio file through the configured speaker."""
+    """Play an audio file through the configured speaker, silently."""
     a = settings()["audio"]
     subprocess.run(
         [
             "aplay",
+            "-q",
             "-D", f"plughw:CARD={a['speaker_name']},DEV={a['speaker_device']}",
             str(audio_path),
         ],
         check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )

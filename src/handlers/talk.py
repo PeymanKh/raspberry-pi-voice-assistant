@@ -5,7 +5,7 @@ Talk handler — runs one button-press turn end-to-end.
 
 Recordings shorter than MIN_RECORDING_S are treated as accidental presses;
 the agent plays a pre-recorded "too short" clip from assets/ if present,
-or a TTS fallback. Any backend error logs at ERROR level.
+or a TTS fallback.
 """
 
 from pathlib import Path
@@ -14,10 +14,7 @@ from .. import db, hardware
 from ..audio import play, record_until_released
 from ..clients import llm, stt, tts
 from ..config_loader import settings
-from ..logger import get_logger
-
-
-log = get_logger("talk")
+from ..logger import AI, HUMAN, SENSOR
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -30,51 +27,37 @@ HISTORY_LIMIT = 20
 
 
 def _wav_duration_s(path: Path) -> float:
-    """Duration from actual file size, not from the WAV header.
-
-    `arecord` killed mid-record (which is exactly what happens on a quick
-    tap, since we SIGINT it as soon as the button is released) sometimes
-    leaves the header's nframes field stale — it reports the full `-d`
-    value even though the data chunk is tiny. Reading the byte count
-    directly is robust to that.
-    """
     try:
         a = settings()["audio"]
-        bytes_per_sec = a["sample_rate"] * 2 * a["channels"]  # S16_LE = 2 bytes
-        data_bytes = max(0, path.stat().st_size - 44)  # 44 = standard WAV header
-        return data_bytes / bytes_per_sec
+        bytes_per_sec = a["sample_rate"] * 2 * a["channels"]
+        return max(0.0, (path.stat().st_size - 44) / bytes_per_sec)
     except Exception:
         return 0.0
 
 
 def handle() -> None:
-    """Run one talk turn. Safe to call from a gpiozero callback thread."""
     talk_btn = hardware.button_talk()
-
-    log.info("button pressed — recording (max %.0fs)", MAX_RECORDING_S)
     record_until_released(talk_btn, MAX_RECORDING_S, TMP_TALK_WAV)
 
     duration = _wav_duration_s(TMP_TALK_WAV)
     if duration < MIN_RECORDING_S:
-        log.info("discarded — %.1fs < %.0fs (noise)", duration, MIN_RECORDING_S)
+        SENSOR.info("recording too short — ignored")
         if TOO_SHORT_AUDIO.exists():
             play(TOO_SHORT_AUDIO)
         else:
             tts.speak(f"Please hold the button for at least {int(MIN_RECORDING_S)} seconds.")
         return
 
-    log.info("recorded %.1fs — processing", duration)
     try:
         user_text = stt.transcribe(TMP_TALK_WAV)
-        log.info("user: %s", user_text)
+        HUMAN.info(user_text)
 
         history = db.get_history(limit=HISTORY_LIMIT)
         prev_len = len(history)
         reply, new_history = llm.chat(user_text, history)
         db.add_messages(new_history[prev_len:])
-        log.info("assistant: %s", reply)
+        AI.info(reply)
 
         tts.speak(reply)
-        log.info("done")
     except Exception as e:  # noqa: BLE001
-        log.error("pipeline error: %s", e)
+        SENSOR.error("pipeline failed: %s", e)

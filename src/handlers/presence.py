@@ -12,15 +12,12 @@ from pathlib import Path
 
 from ..audio import play
 from ..clients import tts
-from ..logger import get_logger
-
-
-log = get_logger("motion")
+from ..logger import SENSOR
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WELCOME_SOUND = _PROJECT_ROOT / "assets" / "welcome.wav"
-COOLDOWN_S = 300.0  # 5 min
+COOLDOWN_S = 300.0
 
 _lock = threading.Lock()
 _last_played_ts = 0.0
@@ -38,16 +35,14 @@ def mark_played() -> None:
 
 
 def handle() -> bool:
-    """Play the welcome. Returns True on success, False on error."""
     try:
         if WELCOME_SOUND.exists():
-            log.info("motion detected — playing %s", WELCOME_SOUND.name)
+            SENSOR.info("motion — playing welcome")
             play(WELCOME_SOUND)
         else:
-            log.warning("welcome.wav missing — falling back to live TTS")
+            SENSOR.warning("welcome.wav missing — using live TTS")
             tts.speak("Hello! Press the talk button to chat with me.")
-        log.info("done")
         return True
     except Exception as e:  # noqa: BLE001
-        log.error("welcome failed: %s", e)
+        SENSOR.error("welcome failed: %s", e)
         return False
