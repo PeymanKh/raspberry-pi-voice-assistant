@@ -15,7 +15,7 @@ from ..clients import tts
 from ..logger import get_logger
 
 
-log = get_logger("presence")
+log = get_logger("motion")
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]

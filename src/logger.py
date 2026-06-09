@@ -57,6 +57,9 @@ def _configure_once() -> None:
     root = logging.getLogger()
     root.addHandler(handler)
     root.setLevel(logging.INFO)
+    # Quiet noisy 3rd-party libraries — we only want to hear about errors.
+    for noisy in ("httpx", "httpcore", "urllib3", "openai", "asyncio"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     _configured = True
 
 

@@ -8,12 +8,12 @@ the agent plays a pre-recorded "too short" clip from assets/ if present,
 or a TTS fallback. Any backend error logs at ERROR level.
 """
 
-import wave
 from pathlib import Path
 
 from .. import db, hardware
 from ..audio import play, record_until_released
 from ..clients import llm, stt, tts
+from ..config_loader import settings
 from ..logger import get_logger
 
 
@@ -30,9 +30,19 @@ HISTORY_LIMIT = 20
 
 
 def _wav_duration_s(path: Path) -> float:
+    """Duration from actual file size, not from the WAV header.
+
+    `arecord` killed mid-record (which is exactly what happens on a quick
+    tap, since we SIGINT it as soon as the button is released) sometimes
+    leaves the header's nframes field stale — it reports the full `-d`
+    value even though the data chunk is tiny. Reading the byte count
+    directly is robust to that.
+    """
     try:
-        with wave.open(str(path)) as w:
-            return w.getnframes() / float(w.getframerate())
+        a = settings()["audio"]
+        bytes_per_sec = a["sample_rate"] * 2 * a["channels"]  # S16_LE = 2 bytes
+        data_bytes = max(0, path.stat().st_size - 44)  # 44 = standard WAV header
+        return data_bytes / bytes_per_sec
     except Exception:
         return 0.0
 
