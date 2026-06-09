@@ -14,6 +14,10 @@ import sys
 from pathlib import Path
 from time import sleep
 
+# Make src importable when running from project root.
+# MUST happen before `from src import ...` below.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import yaml
 from gpiozero import (
     LED,
@@ -27,10 +31,6 @@ from gpiozero import (
 # matches what main.py actually uses, so the test catches the same
 # behaviour the agent will see.
 from src import hardware as hw
-
-
-# Make src importable when running from project root.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 cfg = yaml.safe_load(open("configs/settings.yaml"))
 g, a = cfg["gpio"], cfg["audio"]
