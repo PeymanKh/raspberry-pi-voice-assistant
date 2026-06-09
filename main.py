@@ -11,7 +11,7 @@ import time
 
 from src import hardware
 from src.handlers import presence, talk
-from src.logger import SYSTEM
+from src.logger import SENSOR, SYSTEM
 
 
 _busy = threading.Lock()  # prevent talk + presence from running concurrently
@@ -28,8 +28,10 @@ def _on_talk_pressed() -> None:
 
 def _motion_loop() -> None:
     motion = hardware.motion()
+    SENSOR.info("motion watcher ready")
     while True:
         motion.wait_for_motion()
+        SENSOR.info("motion detected")
 
         if presence.in_cooldown() or not _busy.acquire(blocking=False):
             motion.wait_for_no_motion()

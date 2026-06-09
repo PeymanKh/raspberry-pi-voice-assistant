@@ -37,6 +37,7 @@ def _wav_duration_s(path: Path) -> float:
 
 def handle() -> None:
     talk_btn = hardware.button_talk()
+    SENSOR.info("button pressed")
     record_until_released(talk_btn, MAX_RECORDING_S, TMP_TALK_WAV)
 
     duration = _wav_duration_s(TMP_TALK_WAV)

@@ -20,7 +20,8 @@ WELCOME_SOUND = _PROJECT_ROOT / "assets" / "welcome.wav"
 COOLDOWN_S = 300.0
 
 _lock = threading.Lock()
-_last_played_ts = 0.0
+# -inf so a fresh boot is never considered "in cooldown".
+_last_played_ts: float = float("-inf")
 
 
 def in_cooldown() -> bool:
@@ -37,11 +38,11 @@ def mark_played() -> None:
 def handle() -> bool:
     try:
         if WELCOME_SOUND.exists():
-            SENSOR.info("motion — playing welcome")
             play(WELCOME_SOUND)
         else:
             SENSOR.warning("welcome.wav missing — using live TTS")
             tts.speak("Hello! Press the talk button to chat with me.")
+        SENSOR.info("welcome played")
         return True
     except Exception as e:  # noqa: BLE001
         SENSOR.error("welcome failed: %s", e)
