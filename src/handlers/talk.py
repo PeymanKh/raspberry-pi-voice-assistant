@@ -24,7 +24,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TOO_SHORT_AUDIO = _PROJECT_ROOT / "assets" / "too_short.wav"
 TMP_TALK_WAV = Path("/tmp/talk.wav")
 
-MIN_RECORDING_S = 5.0
+MIN_RECORDING_S = 2.0
 MAX_RECORDING_S = 10.0
 HISTORY_LIMIT = 20
 
