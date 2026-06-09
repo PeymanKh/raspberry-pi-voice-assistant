@@ -1,12 +1,12 @@
 """
-Shared GPIO singletons.
+Shared GPIO + DHT singletons.
 
-Both `main.py` (talk button, PIR) and `src/llm.py` (LED via the set_led
-tool) need GPIO. If both modules instantiate their own gpiozero objects
-on the same pin, the second one fails with 'GPIO busy'. This module
-owns one instance per pin and lazily creates them on first use.
+Anything that talks to physical hardware goes through this module so we
+keep exactly one instance per device and avoid 'GPIO busy' errors when
+multiple modules touch the same pin.
 """
 
+import time
 from functools import lru_cache
 
 from gpiozero import LED, Button, DigitalInputDevice, MotionSensor
@@ -17,6 +17,8 @@ from .config_loader import settings
 def _pin(name: str) -> int:
     return settings()["gpio"][name]
 
+
+# GPIO devices
 
 @lru_cache(maxsize=1)
 def led() -> LED:
@@ -35,13 +37,40 @@ def motion() -> MotionSensor:
 
 @lru_cache(maxsize=1)
 def ldr() -> DigitalInputDevice:
+    """Digital LDR module. value=0 → LIGHT, value=1 → DARK."""
     return DigitalInputDevice(_pin("ldr"))
 
 
+@lru_cache(maxsize=1)
+def dht11():
+    """DHT11 sensor. Imported lazily because adafruit_dht needs the GPIO interface."""
+    import adafruit_dht
+    import board
+    pin_attr = f"D{_pin('dht')}"
+    return adafruit_dht.DHT11(getattr(board, pin_attr))
+
+
+# High-level helpers
+
 def set_led(on: bool) -> None:
-    """Turn the AI-controlled LED on or off."""
+    """Turn the LED on or off."""
     l = led()
     if on:
         l.on()
     else:
         l.off()
+
+
+def read_dht11(retries: int = 5, delay: float = 1.0) -> tuple[float | None, float | None]:
+    """Read (temperature_c, humidity_pct) with retries. Returns (None, None) on persistent failure."""
+    dht = dht11()
+    for _ in range(retries):
+        try:
+            t = dht.temperature
+            h = dht.humidity
+            if t is not None and h is not None:
+                return t, h
+        except RuntimeError:
+            pass
+        time.sleep(delay)
+    return None, None

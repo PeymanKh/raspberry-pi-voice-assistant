@@ -21,8 +21,8 @@ data/chat.db lying around, delete it.
 """
 
 import json
-import sqlite3
 import time
+import sqlite3
 from pathlib import Path
 
 

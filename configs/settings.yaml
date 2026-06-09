@@ -10,8 +10,8 @@ gpio:
   led:          18
   button_talk:  4
   motion:       17
-  dht:          27   # DHT11/DHT22 data pin
-  ldr:          22   # LDR digital module (LM393)
+  dht:          27
+  ldr:          22
 
 models:
   llm: google/gemini-3.1-flash-lite-preview
@@ -19,5 +19,5 @@ models:
   tts: google/gemini-3.1-flash-tts-preview
 
 tts:
-  voice: Aoede
+  voice: Enceladus
   sample_rate: 24000
