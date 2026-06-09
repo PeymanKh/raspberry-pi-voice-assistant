@@ -54,17 +54,14 @@ def dht11():
 def distance_sensor() -> DistanceSensor:
     """HC-SR04 ultrasonic. distance attr returns metres.
 
-    queue_len=1 disables internal sample smoothing so first reads return
-    immediately. With the default queue_len=9 the sensor blocks until 9
-    valid samples are buffered — fine in a tight test loop, but if even
-    one trigger/echo cycle fails (which happens occasionally with the
-    HC-SR04 on a software-PWM Pi) the whole call hangs.
+    Must be created on the main thread (via the eager call in main.py)
+    so its internal sampling thread spawns from a healthy context.
     """
     return DistanceSensor(
         echo=_pin("hcsr04_echo"),
         trigger=_pin("hcsr04_trig"),
         max_distance=2.0,
-        queue_len=1,
+        queue_len=3,
     )
 
 

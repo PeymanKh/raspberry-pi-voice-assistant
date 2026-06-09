@@ -27,8 +27,8 @@ def _on_talk_pressed() -> None:
 
 
 def _on_touch() -> None:
-    if audio.stop_playback():
-        SENSOR.info("touch — playback stopped")
+    stopped = audio.stop_playback()
+    SENSOR.info("touch — playback stopped" if stopped else "touch — nothing playing")
 
 
 def _motion_loop() -> None:
@@ -58,6 +58,11 @@ def main() -> None:
 
     touch_pad = hardware.touch()
     touch_pad.when_pressed = _on_touch
+
+    # Eagerly create the ultrasonic on the main thread. Its internal
+    # sampling thread inherits this context, which makes runtime reads
+    # reliable. Lazy-creating from the LLM tool thread is flaky.
+    hardware.distance_sensor()
 
     threading.Thread(target=_motion_loop, daemon=True).start()
 
