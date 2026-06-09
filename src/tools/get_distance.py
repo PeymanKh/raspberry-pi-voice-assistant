@@ -1,9 +1,24 @@
 """
 LLM tool: get_distance — distance to the nearest object from the
 HC-SR04 ultrasonic sensor, in centimetres.
+
+The read is wrapped in a short timeout. If the sensor fails to echo
+(noisy environment, blocked view, dead sensor) we return an error
+instead of hanging the agent.
 """
 
+import threading
+import warnings
+
 from .. import hardware
+
+
+# Silence the gpiozero "no echo received" warnings — we handle the failure
+# explicitly through the timeout below, the user doesn't need to see them.
+warnings.filterwarnings("ignore", module="gpiozero.input_devices")
+
+
+_READ_TIMEOUT_S = 2.0
 
 
 SPEC = {
@@ -22,5 +37,23 @@ SPEC = {
 
 
 def run() -> dict:
-    metres = hardware.distance_sensor().distance  # 0.0 to max_distance (2.0)
-    return {"distance_cm": round(metres * 100, 1)}
+    result: list = [None]
+
+    def _read() -> None:
+        try:
+            metres = hardware.distance_sensor().distance
+            result[0] = ("ok", round(metres * 100, 1))
+        except Exception as e:  # noqa: BLE001
+            result[0] = ("err", str(e))
+
+    t = threading.Thread(target=_read, daemon=True)
+    t.start()
+    t.join(timeout=_READ_TIMEOUT_S)
+
+    if result[0] is None:
+        return {"error": "ultrasonic sensor timed out — view may be blocked"}
+
+    kind, val = result[0]
+    if kind == "err":
+        return {"error": f"ultrasonic read failed: {val}"}
+    return {"distance_cm": val}
