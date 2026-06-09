@@ -9,7 +9,7 @@ multiple modules touch the same pin.
 import time
 from functools import lru_cache
 
-from gpiozero import LED, Button, DigitalInputDevice, MotionSensor
+from gpiozero import LED, Button, Buzzer, DigitalInputDevice, DistanceSensor, MotionSensor
 
 from .config_loader import settings
 
@@ -48,6 +48,27 @@ def dht11():
     import board
     pin_attr = f"D{_pin('dht')}"
     return adafruit_dht.DHT11(getattr(board, pin_attr))
+
+
+@lru_cache(maxsize=1)
+def distance_sensor() -> DistanceSensor:
+    """HC-SR04 ultrasonic. distance attr returns metres."""
+    return DistanceSensor(
+        echo=_pin("hcsr04_echo"),
+        trigger=_pin("hcsr04_trig"),
+        max_distance=2.0,
+    )
+
+
+@lru_cache(maxsize=1)
+def touch() -> Button:
+    """TTP223 capacitive touch — active high, no pull-up needed."""
+    return Button(_pin("touch"), pull_up=False, bounce_time=0.05)
+
+
+@lru_cache(maxsize=1)
+def buzzer() -> Buzzer:
+    return Buzzer(_pin("buzzer"))
 
 
 # High-level helpers

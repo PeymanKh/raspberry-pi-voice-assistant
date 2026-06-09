@@ -12,6 +12,10 @@ gpio:
   motion:       17
   dht:          27
   ldr:          22
+  hcsr04_trig:  23
+  hcsr04_echo:  24
+  touch:        25
+  buzzer:       16
 
 models:
   llm: google/gemini-3.1-flash-lite-preview

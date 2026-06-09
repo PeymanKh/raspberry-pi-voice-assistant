@@ -9,7 +9,14 @@ To add a new tool: drop a `<name>.py` here, import it below, append to
 ALL_TOOLS. The LLM client picks up TOOLS_SPEC and DISPATCH automatically.
 """
 
-from . import get_humidity, get_led_state, get_temperature, set_led
+from . import (
+    get_distance,
+    get_humidity,
+    get_led_state,
+    get_temperature,
+    play_tune,
+    set_led,
+)
 
 
 ALL_TOOLS = [
@@ -17,6 +24,8 @@ ALL_TOOLS = [
     get_led_state,
     get_temperature,
     get_humidity,
+    get_distance,
+    play_tune,
 ]
 
 

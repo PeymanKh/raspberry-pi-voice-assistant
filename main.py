@@ -9,7 +9,7 @@ make sure they don't overlap.
 import threading
 import time
 
-from src import hardware
+from src import audio, hardware
 from src.handlers import presence, talk
 from src.logger import SENSOR, SYSTEM
 
@@ -24,6 +24,11 @@ def _on_talk_pressed() -> None:
         talk.handle()
     finally:
         _busy.release()
+
+
+def _on_touch() -> None:
+    if audio.stop_playback():
+        SENSOR.info("touch — playback stopped")
 
 
 def _motion_loop() -> None:
@@ -51,6 +56,9 @@ def main() -> None:
     talk_btn = hardware.button_talk()
     talk_btn.when_pressed = _on_talk_pressed
 
+    touch_pad = hardware.touch()
+    touch_pad.when_pressed = _on_touch
+
     threading.Thread(target=_motion_loop, daemon=True).start()
 
     SYSTEM.info("ready")
@@ -58,6 +66,7 @@ def main() -> None:
         "hold TALK (GPIO %d) to record (min %.0fs, max %.0fs)",
         talk_btn.pin.number, talk.MIN_RECORDING_S, talk.MAX_RECORDING_S,
     )
+    SYSTEM.info("touch (GPIO %d) stops playback", touch_pad.pin.number)
     SYSTEM.info("welcome on motion (cooldown %.0f min)", presence.COOLDOWN_S / 60)
     SYSTEM.info("Ctrl-C to exit")
 
