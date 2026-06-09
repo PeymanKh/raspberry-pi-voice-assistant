@@ -59,10 +59,9 @@ def main() -> None:
     touch_pad = hardware.touch()
     touch_pad.when_pressed = _on_touch
 
-    # Eagerly create the ultrasonic on the main thread. Its internal
-    # sampling thread inherits this context, which makes runtime reads
-    # reliable. Lazy-creating from the LLM tool thread is flaky.
-    hardware.distance_sensor()
+    # Warm up the ultrasonic — the very first echo cycle often fails,
+    # so we burn it here on the main thread before any user can ask.
+    hardware.read_distance_cm()
 
     threading.Thread(target=_motion_loop, daemon=True).start()
 

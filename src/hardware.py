@@ -9,7 +9,7 @@ multiple modules touch the same pin.
 import time
 from functools import lru_cache
 
-from gpiozero import LED, Button, Buzzer, DigitalInputDevice, DistanceSensor, MotionSensor
+from gpiozero import LED, Button, Buzzer, DigitalInputDevice, MotionSensor, OutputDevice
 
 from .config_loader import settings
 
@@ -51,18 +51,13 @@ def dht11():
 
 
 @lru_cache(maxsize=1)
-def distance_sensor() -> DistanceSensor:
-    """HC-SR04 ultrasonic. distance attr returns metres.
+def _hcsr04_trig() -> OutputDevice:
+    return OutputDevice(_pin("hcsr04_trig"))
 
-    Must be created on the main thread (via the eager call in main.py)
-    so its internal sampling thread spawns from a healthy context.
-    """
-    return DistanceSensor(
-        echo=_pin("hcsr04_echo"),
-        trigger=_pin("hcsr04_trig"),
-        max_distance=2.0,
-        queue_len=3,
-    )
+
+@lru_cache(maxsize=1)
+def _hcsr04_echo() -> DigitalInputDevice:
+    return DigitalInputDevice(_pin("hcsr04_echo"))
 
 
 @lru_cache(maxsize=1)
@@ -85,6 +80,47 @@ def set_led(on: bool) -> None:
         l.on()
     else:
         l.off()
+
+
+def read_distance_cm(timeout: float = 0.04, retries: int = 4) -> float | None:
+    """Manual HC-SR04 read. Returns cm, or None if no valid echo after retries.
+
+    We bypass gpiozero's DistanceSensor — its internal sampling thread is
+    flaky from non-main threads (the first read often fails with
+    'no echo received'). A direct trigger+echo poll with retries is more
+    reliable for our use case.
+    """
+    trig = _hcsr04_trig()
+    echo = _hcsr04_echo()
+
+    for _ in range(retries):
+        # 10us trigger pulse
+        trig.on()
+        time.sleep(0.00001)
+        trig.off()
+
+        # Wait for echo rising edge
+        deadline = time.monotonic() + timeout
+        while not echo.value:
+            if time.monotonic() > deadline:
+                break
+        else:
+            start = time.monotonic()
+            # Wait for echo falling edge
+            deadline = start + timeout
+            while echo.value:
+                if time.monotonic() > deadline:
+                    break
+            else:
+                end = time.monotonic()
+                # speed of sound 34300 cm/s, divide by 2 for round trip
+                cm = (end - start) * 17150
+                if 1.0 <= cm <= 400.0:
+                    return round(cm, 1)
+        # Otherwise: timed out or read out of range — short pause then retry
+        time.sleep(0.05)
+
+    return None
 
 
 def read_dht11(retries: int = 5, delay: float = 1.0) -> tuple[float | None, float | None]:

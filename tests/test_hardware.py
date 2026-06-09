@@ -20,9 +20,13 @@ from gpiozero import (
     Button,
     Buzzer,
     DigitalInputDevice,
-    DistanceSensor,
     MotionSensor,
 )
+
+# Use our own ultrasonic reader rather than gpiozero's DistanceSensor —
+# matches what main.py actually uses, so the test catches the same
+# behaviour the agent will see.
+from src import hardware as hw
 
 
 # Make src importable when running from project root.
@@ -107,19 +111,18 @@ def test_dht11() -> bool:
 
 
 def test_distance() -> bool:
-    """HC-SR04 ultrasonic. Confirms we get sensible cm readings."""
-    s = DistanceSensor(echo=g["hcsr04_echo"], trigger=g["hcsr04_trig"], max_distance=2.0)
+    """HC-SR04 ultrasonic via the same path the agent uses."""
     print("  taking 5 readings...")
     readings = []
     for _ in range(5):
-        cm = s.distance * 100
-        print(f"    {cm:.1f} cm")
-        readings.append(cm)
-        sleep(0.3)
-    # Pass if at least one reading is in a sane range (between 1 cm and 200 cm).
-    ok = any(1.0 <= r <= 200.0 for r in readings)
-    s.close()
-    return ok
+        cm = hw.read_distance_cm()
+        if cm is None:
+            print("    (no echo)")
+        else:
+            print(f"    {cm:.1f} cm")
+            readings.append(cm)
+        sleep(0.2)
+    return any(1.0 <= r <= 200.0 for r in readings)
 
 
 def test_touch() -> bool:
