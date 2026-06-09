@@ -1,7 +1,8 @@
 """Hardware integration test.
 
-Exercises every component (LEDs, buzzer, both buttons, PIR motion
-sensor, USB mic, speaker) and prints a coloured pass/fail summary.
+Exercises every component (LED + LDR combo, DHT11, talk button, PIR
+motion sensor, USB mic, speaker) and prints a coloured pass/fail
+summary. Run this before a demo to catch a loose wire fast.
 
 Run from the project root, with venv active:
 
@@ -14,7 +15,7 @@ from pathlib import Path
 from time import sleep
 
 import yaml
-from gpiozero import LED, Button, Buzzer, MotionSensor
+from gpiozero import LED, Button, DigitalInputDevice, MotionSensor
 
 
 # Make src importable when running from project root.
@@ -48,32 +49,68 @@ def step(name: str, fn) -> None:
 # ── Tests ──────────────────────────────────────────────────────
 
 
-def test_leds() -> bool:
-    yellow, green, red = (
-        LED(g["led_yellow"]),
-        LED(g["led_green"]),
-        LED(g["led_red"]),
-    )
-    print("  yellow → green → red, then all blink 2x")
-    for led in (yellow, green, red):
-        led.on(); sleep(0.5); led.off()
-    for _ in range(2):
-        yellow.on(); green.on(); red.on(); sleep(0.3)
-        yellow.off(); green.off(); red.off(); sleep(0.3)
-    return True
+def test_led_and_ldr() -> bool:
+    """Combined test: toggle LED and verify the LDR (placed next to it) follows.
+
+    Polarity baked in from tuning:
+      LDR = 1 → DARK
+      LDR = 0 → LIGHT (LED shining on it)
+    """
+    led = LED(g["led"])
+    ldr = DigitalInputDevice(g["ldr"])
+
+    print("  step 1: LED off → expect LDR=1 (DARK)")
+    led.off()
+    sleep(2)
+    off1 = ldr.value
+    print(f"    LDR={off1}")
+
+    print("  step 2: LED on → expect LDR=0 (LIGHT)")
+    led.on()
+    sleep(2)
+    on = ldr.value
+    print(f"    LDR={on}")
+
+    print("  step 3: LED off → expect LDR=1 (DARK) again")
+    led.off()
+    sleep(2)
+    off2 = ldr.value
+    print(f"    LDR={off2}")
+
+    return off1 == 1 and on == 0 and off2 == 1
 
 
-def test_buzzer() -> bool:
-    buzzer = Buzzer(g["buzzer"])
-    print("  3 short beeps")
-    for _ in range(3):
-        buzzer.on(); sleep(0.15); buzzer.off(); sleep(0.15)
-    return True
+def test_dht11() -> bool:
+    """Read temperature and humidity from the DHT11. Retries a few times — DHT11 is flaky on first reads."""
+    import adafruit_dht
+    import board
+
+    pin_attr = f"D{g['dht']}"
+    dht = adafruit_dht.DHT11(getattr(board, pin_attr))
+    print(f"  reading DHT11 on GPIO {g['dht']} (may need a few retries)...")
+    try:
+        for i in range(10):
+            try:
+                t = dht.temperature
+                h = dht.humidity
+                if t is not None and h is not None:
+                    print(f"  temperature={t}°C  humidity={h}%")
+                    return True
+                print(f"    retry {i+1}: got None")
+            except RuntimeError as e:
+                print(f"    retry {i+1}: {e}")
+            sleep(2)
+        return False
+    finally:
+        try:
+            dht.exit()
+        except Exception:
+            pass
 
 
-def test_button(label: str, pin: int) -> bool:
-    btn = Button(pin)
-    print(f"  press the {label.upper()} button within 8s...")
+def test_talk_button() -> bool:
+    btn = Button(g["button_talk"])
+    print("  press the TALK button within 8s...")
     for _ in range(80):
         if btn.is_pressed:
             print("  detected")
@@ -122,12 +159,11 @@ def test_audio() -> bool:
 def main() -> int:
     header("Voice Assistant — Hardware Test")
 
-    step("LEDs (yellow + green + red)", test_leds)
-    step("Buzzer",                       test_buzzer)
-    step("Talk button",                  lambda: test_button("talk",  g["button_talk"]))
-    step("Reset button",                 lambda: test_button("reset", g["button_reset"]))
-    step("PIR motion sensor",            test_motion)
-    step("Microphone + speaker",         test_audio)
+    step("LED + LDR (combined)",  test_led_and_ldr)
+    step("DHT11 (temp/humidity)", test_dht11)
+    step("Talk button",           test_talk_button)
+    step("PIR motion sensor",     test_motion)
+    step("Microphone + speaker",  test_audio)
 
     header("Summary")
     for name, ok in results:

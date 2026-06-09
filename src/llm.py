@@ -2,7 +2,7 @@
 LLM chat with tool calling, via OpenRouter.
 
 Exposes `chat(message, history) -> (reply, updated_history)`. The model
-can call `set_led(state)` to toggle the red LED. We loop until the model
+can call `set_led(state)` to toggle the LED. We loop until the model
 returns a final text reply (no more tool calls).
 
 History is a list of plain dicts (no system prompt — we prepend it each
@@ -41,7 +41,7 @@ _TOOLS_SPEC = [
         "type": "function",
         "function": {
             "name": "set_led",
-            "description": "Turn the red LED on or off.",
+            "description": "Turn the LED on or off.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -59,7 +59,7 @@ _TOOLS_SPEC = [
 
 
 def _tool_set_led(state: str) -> dict:
-    hardware.set_red_led(state == "on")
+    hardware.set_led(state == "on")
     return {"ok": True, "state": state}
 
 
