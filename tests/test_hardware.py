@@ -1,8 +1,8 @@
 """Hardware integration test.
 
-Exercises every component (LED + LDR combo, DHT11, talk button, PIR
-motion sensor, USB mic, speaker) and prints a coloured pass/fail
-summary. Run this before a demo to catch a loose wire fast.
+Exercises every component (LED + LDR, DHT11, ultrasonic, touch, buzzer,
+PIR, talk button, mic + speaker) and prints a coloured pass/fail summary.
+Run this before a demo to catch a loose wire fast.
 
 Run from the project root, with venv active:
 
@@ -15,7 +15,14 @@ from pathlib import Path
 from time import sleep
 
 import yaml
-from gpiozero import LED, Button, DigitalInputDevice, MotionSensor
+from gpiozero import (
+    LED,
+    Button,
+    Buzzer,
+    DigitalInputDevice,
+    DistanceSensor,
+    MotionSensor,
+)
 
 
 # Make src importable when running from project root.
@@ -50,44 +57,35 @@ def step(name: str, fn) -> None:
 
 
 def test_led_and_ldr() -> bool:
-    """Combined test: toggle LED and verify the LDR (placed next to it) follows.
-
-    Polarity baked in from tuning:
-      LDR = 1 → DARK
-      LDR = 0 → LIGHT (LED shining on it)
+    """Toggle LED, verify the LDR placed next to it follows.
+    Polarity: LDR=1 → DARK, LDR=0 → LIGHT.
     """
     led = LED(g["led"])
     ldr = DigitalInputDevice(g["ldr"])
 
     print("  step 1: LED off → expect LDR=1 (DARK)")
-    led.off()
-    sleep(2)
-    off1 = ldr.value
+    led.off(); sleep(2); off1 = ldr.value
     print(f"    LDR={off1}")
 
     print("  step 2: LED on → expect LDR=0 (LIGHT)")
-    led.on()
-    sleep(2)
-    on = ldr.value
+    led.on();  sleep(2); on = ldr.value
     print(f"    LDR={on}")
 
     print("  step 3: LED off → expect LDR=1 (DARK) again")
-    led.off()
-    sleep(2)
-    off2 = ldr.value
+    led.off(); sleep(2); off2 = ldr.value
     print(f"    LDR={off2}")
 
     return off1 == 1 and on == 0 and off2 == 1
 
 
 def test_dht11() -> bool:
-    """Read temperature and humidity from the DHT11. Retries a few times — DHT11 is flaky on first reads."""
+    """Read temp + humidity from DHT11, with retries (DHT11 is flaky on first reads)."""
     import adafruit_dht
     import board
 
     pin_attr = f"D{g['dht']}"
     dht = adafruit_dht.DHT11(getattr(board, pin_attr))
-    print(f"  reading DHT11 on GPIO {g['dht']} (may need a few retries)...")
+    print(f"  reading DHT11 on GPIO {g['dht']}...")
     try:
         for i in range(10):
             try:
@@ -108,25 +106,69 @@ def test_dht11() -> bool:
             pass
 
 
+def test_distance() -> bool:
+    """HC-SR04 ultrasonic. Confirms we get sensible cm readings."""
+    s = DistanceSensor(echo=g["hcsr04_echo"], trigger=g["hcsr04_trig"], max_distance=2.0)
+    print("  taking 5 readings...")
+    readings = []
+    for _ in range(5):
+        cm = s.distance * 100
+        print(f"    {cm:.1f} cm")
+        readings.append(cm)
+        sleep(0.3)
+    # Pass if at least one reading is in a sane range (between 1 cm and 200 cm).
+    ok = any(1.0 <= r <= 200.0 for r in readings)
+    s.close()
+    return ok
+
+
+def test_touch() -> bool:
+    """TTP223 capacitive touch. Asks the user to tap the pad."""
+    t = Button(g["touch"], pull_up=False)
+    print("  TAP the touch pad within 8 seconds...")
+    for _ in range(80):
+        if t.is_pressed:
+            print("  detected")
+            t.close()
+            return True
+        sleep(0.1)
+    t.close()
+    return False
+
+
+def test_buzzer() -> bool:
+    """Active buzzer — 3 short beeps."""
+    b = Buzzer(g["buzzer"])
+    print("  3 short beeps...")
+    for _ in range(3):
+        b.on(); sleep(0.15); b.off(); sleep(0.15)
+    b.close()
+    return True
+
+
 def test_talk_button() -> bool:
     btn = Button(g["button_talk"])
-    print("  press the TALK button within 8s...")
+    print("  press the TALK button within 8 seconds...")
     for _ in range(80):
         if btn.is_pressed:
             print("  detected")
+            btn.close()
             return True
         sleep(0.1)
+    btn.close()
     return False
 
 
 def test_motion() -> bool:
     pir = MotionSensor(g["motion"])
-    print("  wave at the PIR within 8s...")
+    print("  wave at the PIR within 8 seconds...")
     for _ in range(80):
         if pir.motion_detected:
             print("  detected")
+            pir.close()
             return True
         sleep(0.1)
+    pir.close()
     return False
 
 
@@ -161,6 +203,9 @@ def main() -> int:
 
     step("LED + LDR (combined)",  test_led_and_ldr)
     step("DHT11 (temp/humidity)", test_dht11)
+    step("Ultrasonic distance",   test_distance)
+    step("Touch pad",             test_touch)
+    step("Buzzer",                test_buzzer)
     step("Talk button",           test_talk_button)
     step("PIR motion sensor",     test_motion)
     step("Microphone + speaker",  test_audio)
